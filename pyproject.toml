@@ -1,0 +1,26 @@
+[project]
+name = "image-gen-mcp"
+version = "0.1.0"
+description = "Claude Code MCP — 로컬 GPU(Stable Diffusion)가 있으면 로컬로, 없으면 무료 클라우드로 이미지를 생성하는 오퍼레이터"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "mcp>=1.2",
+]
+
+# 로컬 GPU 백엔드에서 HF 모델 다운로드까지 쓰려면(선택):
+#   uvx --with huggingface_hub image-gen-mcp
+# 클라우드만 쓰면 추가 의존성 없음(표준 라이브러리 urllib 사용).
+[project.optional-dependencies]
+local = ["huggingface_hub>=0.20"]
+
+[project.scripts]
+image-gen-mcp = "imagegen_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["imagegen_mcp"]

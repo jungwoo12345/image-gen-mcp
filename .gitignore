@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+outputs/
+# 사용자 데이터는 ~/.image-gen 에 있으므로 레포에 포함되지 않음

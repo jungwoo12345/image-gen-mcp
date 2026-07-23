@@ -25,6 +25,7 @@ def _gpu() -> dict | None:
         r = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total,memory.free",
              "--format=csv,noheader,nounits"],
+            stdin=subprocess.DEVNULL,
             capture_output=True, text=True, encoding="utf-8",
             timeout=15, creationflags=_CREATE_NO_WINDOW)
         line = (r.stdout or "").strip().splitlines()[0]
@@ -78,6 +79,7 @@ def _run_cli(args: list, timeout: int) -> subprocess.CompletedProcess:
     d, py = _paths()
     env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     return subprocess.run([py, "-X", "utf8", "cli.py", *args], cwd=d,
+                          stdin=subprocess.DEVNULL,
                           capture_output=True, text=True, encoding="utf-8",
                           errors="replace", timeout=timeout, env=env,
                           creationflags=_CREATE_NO_WINDOW)

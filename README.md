@@ -42,12 +42,14 @@
 
 ### A) 남에게 공유 (GPU 없어도 됨) — uvx 한 줄
 ```
-# PyPI 배포 후:
-claude mcp add image-gen -- uvx image-gen-mcp
-# 또는 GitHub 에서 직접:
-claude mcp add image-gen -- uvx --from git+https://github.com/<user>/image-gen-mcp image-gen-mcp
+claude mcp add image-gen -- uvx --from git+https://github.com/jungwoo12345/image-gen-mcp.git image-gen-mcp
 ```
 받는 사람은 설치·GPU·키 없이 바로 클라우드로 생성. (torch 등 무거운 것 안 받음)
+
+> ⚠️ **`uvx image-gen-mcp`(바 이름)로 설치하지 마세요.** PyPI 에 같은 이름의 **다른(남의) 패키지**가
+> 이미 올라와 있어(엉뚱한 코드 = 공급망 위험) 그 이름만 쓰면 다른 게 설치됩니다. **반드시 위처럼
+> `--from git+https://github.com/jungwoo12345/image-gen-mcp.git` 로 저장소 주소를 직접 가리켜야** 합니다.
+> (uvx 는 절대경로가 필요할 수 있음: `"C:/Users/<이름>/.local/bin/uvx.exe"`)
 
 ### B) 로컬 GPU 로 쓰기 (본인)
 이미 createImg venv(torch/diffusers)가 있으면 그걸 재사용해 등록한다:

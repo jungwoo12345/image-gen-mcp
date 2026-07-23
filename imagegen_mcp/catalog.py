@@ -45,14 +45,22 @@ def _tokens(text):
     return re.findall(r"[a-z0-9]+|[가-힣]+", text.lower())
 
 
+def _tok_match(tok, word):
+    """토큰 하나가 태그 단어 하나와 맞는가. 부분문자열 오탐(art⊂cartoon)을 막기 위해
+    동일하거나, 둘 다 3자 이상이고 한쪽이 다른 쪽의 '접두'일 때만 매칭한다."""
+    if tok == word:
+        return True
+    if len(tok) >= 3 and len(word) >= 3 and (tok.startswith(word) or word.startswith(tok)):
+        return True
+    return False
+
+
 def _score(tokens, tags):
     hits = []
     for tag in tags:
-        t = tag.lower()
-        for tok in tokens:
-            if tok == t or (len(tok) >= 2 and (tok in t or t in tok)):
-                hits.append(tag)
-                break
+        words = _tokens(tag)  # 다단어 태그("cartoon 3d")를 단어별로 분해해 단어 단위 비교
+        if any(_tok_match(tok, w) for tok in tokens for w in words):
+            hits.append(tag)
     return len(hits), hits
 
 
@@ -71,14 +79,29 @@ def suggest(request, top=4):
             sl.append((s, hits, l))
     sl.sort(key=lambda x: -x[0])
     best = sm[0][3] if sm else None
-    return {
+    best_model_hits = sm[0][1] if sm else 0
+    # 보유분에 요청 스타일과 맞는 게 없으면(모델 태그 0매치 + 매칭 LoRA 0) 웹 확보를 권한다.
+    # 일반 사용자는 "웹에서 찾아줘"라고 말할 줄 모르므로, 여기서 에스컬레이션을 명시한다.
+    local_weak = (best_model_hits == 0) and (len(sl) == 0)
+    out = {
         "request": request,
         "model_candidates": [{"key": m["key"], "base": m["base"], "matched": hits,
                               "style_hits": s, "notes": m["notes"]} for _, s, hits, m in sm[:top]],
         "lora_candidates": [{"name": l["name"], "base": l["base"], "matched": hits,
                              "rec_scale": l["rec_scale"], "notes": l["notes"]} for s, hits, l in sl[:top]],
         "hint": _hint(request, best),
+        "local_match": "weak" if local_weak else "ok",
     }
+    if local_weak:
+        out["recommend_web_search"] = True
+        out["next"] = (
+            "보유 자산 중 이 요청의 화풍에 맞는 모델/LoRA 가 없다. 사용자가 웹 검색을 "
+            "요청하지 않았더라도, 더 나은 결과를 위해 search_hf('<영어 스타일 키워드>') 로 "
+            "HF 에서 어울리는 LoRA/체크포인트를 찾아라. 좋은 후보가 있으면 용량을 고지하고 "
+            "사용자 허가를 받아 download_asset 으로 확보한 뒤 생성하라. 적절한 게 없거나 "
+            "사용자가 원치 않으면, 보유 베이스 모델 + 프롬프트 문구로 화풍을 최대한 살려 생성하라."
+        )
+    return out
 
 
 def _hint(request, best):

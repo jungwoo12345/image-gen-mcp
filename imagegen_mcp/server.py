@@ -4,6 +4,8 @@ Claude 가 "○○ 그려줘" 를 받으면:
   1) check_resources    어떤 백엔드로 생성되는지 확인(로컬 GPU vs 무료 클라우드)
   2) recall_lessons     비슷한 과거 실패·교훈 확인(같은 실수 방지)
   3) suggest_assets     로컬이면 모델/LoRA 추천, 클라우드면 스타일 프롬프트 가이드
+     └ recommend_web_search=True 면 → search_hf 로 웹에서 더 나은 LoRA 확보(허가 후 download_asset).
+       일반 사용자는 웹 검색을 요청할 줄 모르니, 보유분에 화풍 맞는 게 없으면 자동으로 이 경로를 타라.
   4) generate_image     영어 프롬프트로 생성
   5) 결과를 보여주고 1~10점 + 오류 지적을 물어본 뒤 record_feedback
 
@@ -50,7 +52,11 @@ def suggest_assets(request: str) -> dict:
     """요청에 어울리는 생성 방법을 추천한다.
     - 로컬 백엔드: 보유 모델/LoRA 후보를 점수순으로(근거 포함).
     - 클라우드 백엔드: 로컬 LoRA 를 못 쓰므로 **스타일을 담을 프롬프트 문구 + 클라우드 모델**을 안내.
-    hint(전신 세로비율·다인물 개별생성 등)도 함께 반영하라."""
+    hint(전신 세로비율·다인물 개별생성 등)도 함께 반영하라.
+
+    ★결과에 recommend_web_search=True / next 가 있으면(=보유분에 화풍 맞는 자산 없음),
+    사용자가 따로 요청하지 않았어도 next 지시를 따라 search_hf 로 웹에서 더 나은 LoRA/모델을
+    찾아라. 일반 사용자는 웹 검색을 요청할 줄 모르므로, 이 에스컬레이션을 건너뛰지 마라."""
     if router.active_name() != "local":
         return {
             "backend": "cloud",

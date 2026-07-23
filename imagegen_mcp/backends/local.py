@@ -75,14 +75,43 @@ def models_dir() -> str:
     return os.path.join(d, "models") if d else ""
 
 
-def _run_cli(args: list, timeout: int) -> subprocess.CompletedProcess:
+def _run_cli(args: list, timeout: int, progress_cb=None) -> subprocess.CompletedProcess:
     d, py = _paths()
     env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
-    return subprocess.run([py, "-X", "utf8", "cli.py", *args], cwd=d,
-                          stdin=subprocess.DEVNULL,
-                          capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", timeout=timeout, env=env,
-                          creationflags=_CREATE_NO_WINDOW)
+    cmd = [py, "-X", "utf8", "cli.py", *args]
+    if progress_cb is None:
+        return subprocess.run(cmd, cwd=d, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=timeout, env=env,
+                              creationflags=_CREATE_NO_WINDOW)
+    # 진행률 콜백 모드: 줄 단위로 읽으며 cli.py 의 "[PROGRESS] N" 을 파싱해 콜백한다.
+    import re
+    import time as _time
+    proc = subprocess.Popen(cmd, cwd=d, stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, encoding="utf-8", errors="replace",
+                            env=env, creationflags=_CREATE_NO_WINDOW)
+    lines, t0 = [], _time.time()
+    try:
+        for line in proc.stdout:
+            lines.append(line)
+            m = re.search(r"\[PROGRESS\]\s*(\d+)", line)
+            if m:
+                try:
+                    progress_cb(int(m.group(1)))
+                except Exception:
+                    pass
+            if _time.time() - t0 > timeout:
+                proc.kill()
+                raise subprocess.TimeoutExpired(cmd, timeout)
+    finally:
+        try:
+            proc.wait(timeout=10)
+        except Exception:
+            proc.kill()
+    r = subprocess.CompletedProcess(cmd, proc.returncode or 0,
+                                    stdout="".join(lines), stderr="")
+    return r
 
 
 def list_assets() -> dict:
@@ -111,7 +140,7 @@ def generate(prompt: str, model: str = "sdxl:RealVisXL_V4.0.safetensors",
              lora: str = "", lora_scale: float = 0.8,
              width: int = 0, height: int = 0, steps: int = 30, seed: int = 0,
              ref_images=None, ref_scale: float = 0.6,
-             timeout: int = 900, **_) -> dict:
+             progress_cb=None, timeout: int = 900, **_) -> dict:
     d, py = _paths()
     if not available():
         return {"ok": False, "error": "로컬 백엔드 사용 불가(createImg/venv/GPU 확인)."}
@@ -140,7 +169,7 @@ def generate(prompt: str, model: str = "sdxl:RealVisXL_V4.0.safetensors",
               "steps": steps or 30, "seed": seed or None}
     t0 = time.time()
     try:
-        r = _run_cli(args, timeout=timeout)
+        r = _run_cli(args, timeout=timeout, progress_cb=progress_cb)
     except subprocess.TimeoutExpired:
         return {"ok": False, "run_id": run_id, "error": f"생성 시간초과({timeout}s)", "params": params}
 

@@ -110,6 +110,7 @@ def list_assets() -> dict:
 def generate(prompt: str, model: str = "sdxl:RealVisXL_V4.0.safetensors",
              lora: str = "", lora_scale: float = 0.8,
              width: int = 0, height: int = 0, steps: int = 30, seed: int = 0,
+             ref_images=None, ref_scale: float = 0.6,
              timeout: int = 900, **_) -> dict:
     d, py = _paths()
     if not available():
@@ -129,6 +130,10 @@ def generate(prompt: str, model: str = "sdxl:RealVisXL_V4.0.safetensors",
         args += ["--height", str(height)]
     if seed:
         args += ["--seed", str(seed)]
+    # 참고 이미지(IP-Adapter, 여러 장) — 존재하는 파일만 전달
+    refs = [str(p) for p in (ref_images or []) if p and os.path.isfile(str(p))]
+    if refs:
+        args += ["--ref", *refs, "--ref-scale", str(ref_scale)]
 
     params = {"prompt": prompt, "backend": "local", "model": model, "lora": lora or None,
               "lora_scale": lora_scale, "width": width or None, "height": height or None,

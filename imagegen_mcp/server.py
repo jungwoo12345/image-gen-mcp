@@ -4,8 +4,9 @@ Claude 가 "○○ 그려줘" 를 받으면:
   1) check_resources    어떤 백엔드로 생성되는지 확인(로컬 GPU vs 무료 클라우드)
   2) recall_lessons     비슷한 과거 실패·교훈 확인(같은 실수 방지)
   3) suggest_assets     로컬이면 모델/LoRA 추천, 클라우드면 스타일 프롬프트 가이드
-     └ recommend_web_search=True 면 → search_hf 로 웹에서 더 나은 LoRA 확보(허가 후 download_asset).
-       일반 사용자는 웹 검색을 요청할 줄 모르니, 보유분에 화풍 맞는 게 없으면 자동으로 이 경로를 타라.
+     └ next 지시를 따라 search_hf 로 웹 대안도 찾아 보유 후보와 함께 제시하라(선택은 사용자 몫).
+       weak(보유분에 화풍 없음)=웹 확보 사실상 필수, ok(보유분 있음)=웹은 추가 선택지로 제안.
+       일반 사용자는 웹 검색을 요청할 줄 모르니, 선택지를 넓혀주는 걸 기본으로 삼아라.
   4) generate_image     영어 프롬프트로 생성
   5) 결과를 보여주고 1~10점 + 오류 지적을 물어본 뒤 record_feedback
 
@@ -54,9 +55,12 @@ def suggest_assets(request: str) -> dict:
     - 클라우드 백엔드: 로컬 LoRA 를 못 쓰므로 **스타일을 담을 프롬프트 문구 + 클라우드 모델**을 안내.
     hint(전신 세로비율·다인물 개별생성 등)도 함께 반영하라.
 
-    ★결과에 recommend_web_search=True / next 가 있으면(=보유분에 화풍 맞는 자산 없음),
-    사용자가 따로 요청하지 않았어도 next 지시를 따라 search_hf 로 웹에서 더 나은 LoRA/모델을
-    찾아라. 일반 사용자는 웹 검색을 요청할 줄 모르므로, 이 에스컬레이션을 건너뛰지 마라."""
+    ★결과의 next 지시를 따라, 보유분 유무와 무관하게 search_hf 로 웹 대안을 찾아
+    보유 후보와 함께 사용자에게 제시하라(선택지는 많을수록 좋고, 선택은 사용자 몫).
+    - local_match=weak: 맞는 보유 자산이 없으므로 웹 확보가 사실상 필수.
+    - local_match=ok  : 보유 후보로 생성 가능하나, 웹의 더 특화된 대안도 추가 선택지로 제안.
+    일반 사용자는 웹 검색을 요청할 줄 모르므로 이 제안을 기본 동작으로 삼되, 사용자가 빠른
+    생성을 원하면 생략 가능. 웹 자산 선택 시 용량 고지·허가 후 download_asset."""
     if router.active_name() != "local":
         return {
             "backend": "cloud",

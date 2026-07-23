@@ -80,8 +80,7 @@ def suggest(request, top=4):
     sl.sort(key=lambda x: -x[0])
     best = sm[0][3] if sm else None
     best_model_hits = sm[0][1] if sm else 0
-    # 보유분에 요청 스타일과 맞는 게 없으면(모델 태그 0매치 + 매칭 LoRA 0) 웹 확보를 권한다.
-    # 일반 사용자는 "웹에서 찾아줘"라고 말할 줄 모르므로, 여기서 에스컬레이션을 명시한다.
+    # 보유분에 요청 스타일과 맞는 게 없으면(모델 태그 0매치 + 매칭 LoRA 0) = weak.
     local_weak = (best_model_hits == 0) and (len(sl) == 0)
     out = {
         "request": request,
@@ -92,14 +91,25 @@ def suggest(request, top=4):
         "hint": _hint(request, best),
         "local_match": "weak" if local_weak else "ok",
     }
+    # 선택지는 많을수록 좋다 — 보유분 유무와 무관하게 항상 웹 대안을 함께 제시한다.
+    # 단, 강도에 따라 "필수(weak)" vs "추가 제안(ok)"으로 지시를 달리한다. 다운로드는 허가제 유지.
+    out["offer_web_options"] = True
     if local_weak:
         out["recommend_web_search"] = True
         out["next"] = (
             "보유 자산 중 이 요청의 화풍에 맞는 모델/LoRA 가 없다. 사용자가 웹 검색을 "
-            "요청하지 않았더라도, 더 나은 결과를 위해 search_hf('<영어 스타일 키워드>') 로 "
-            "HF 에서 어울리는 LoRA/체크포인트를 찾아라. 좋은 후보가 있으면 용량을 고지하고 "
-            "사용자 허가를 받아 download_asset 으로 확보한 뒤 생성하라. 적절한 게 없거나 "
-            "사용자가 원치 않으면, 보유 베이스 모델 + 프롬프트 문구로 화풍을 최대한 살려 생성하라."
+            "요청하지 않았더라도 search_hf('<영어 스타일 키워드>') 로 HF 에서 어울리는 "
+            "LoRA/체크포인트를 찾아라. 좋은 후보가 있으면 용량을 고지하고 사용자 허가를 받아 "
+            "download_asset 으로 확보한 뒤 생성하라. 적절한 게 없거나 사용자가 원치 않으면 "
+            "보유 베이스 모델 + 프롬프트 문구로 화풍을 최대한 살려 생성하라."
+        )
+    else:
+        out["next"] = (
+            "보유 후보로 바로 생성할 수 있다. 다만 선택지를 넓히기 위해, search_hf('<영어 "
+            "스타일 키워드>') 로 웹의 대안(더 특화된 LoRA/모델)도 함께 찾아 보유 후보와 "
+            "나란히 사용자에게 제시하라 — 어떤 걸 쓸지 선택은 사용자 몫이다. 사용자가 "
+            "빠른 생성을 원하거나 보유 후보로 충분하다고 하면 웹 제안은 생략해도 된다. "
+            "웹 자산을 고르면 용량 고지·허가 후 download_asset."
         )
     return out
 

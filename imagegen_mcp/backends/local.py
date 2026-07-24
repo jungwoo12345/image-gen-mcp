@@ -15,6 +15,30 @@ from .. import datadir
 _CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
+def _kill_tree(proc) -> None:
+    """자식(cli.py)과 그 손자까지 확실히 종료. 절대 예외를 밖으로 흘리지 않는다.
+
+    cli.py 는 수 GB 를 점유하므로 살아남으면 그대로 메모리 누수가 된다.
+    Windows 의 proc.kill() 은 손자 프로세스를 남길 수 있어 taskkill /T 를 먼저 쓴다."""
+    if proc.poll() is not None:
+        return
+    if os.name == "nt":
+        try:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           stdin=subprocess.DEVNULL, capture_output=True,
+                           timeout=15, creationflags=_CREATE_NO_WINDOW)
+        except Exception:
+            pass
+    try:
+        proc.kill()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=10)
+    except Exception:
+        pass
+
+
 def _paths():
     s = datadir.settings()
     return s.get("createimg_dir", ""), s.get("venv_python", "")
@@ -86,12 +110,25 @@ def _run_cli(args: list, timeout: int, progress_cb=None) -> subprocess.Completed
                               creationflags=_CREATE_NO_WINDOW)
     # 진행률 콜백 모드: 줄 단위로 읽으며 cli.py 의 "[PROGRESS] N" 을 파싱해 콜백한다.
     import re
-    import time as _time
+    import threading
     proc = subprocess.Popen(cmd, cwd=d, stdin=subprocess.DEVNULL,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="replace",
                             env=env, creationflags=_CREATE_NO_WINDOW)
-    lines, t0 = [], _time.time()
+    # ★타임아웃은 반드시 **읽기 루프 밖**(별도 감시 스레드)에서 재야 한다.
+    #   루프 안에서 재면 자식이 출력을 멈춘 채 굳었을 때 stdout 읽기에서 영원히
+    #   블록되어 검사 자체에 도달하지 못한다. 실제로 SDXL 임베딩 행 사건에서
+    #   14GB 짜리 자식이 타임아웃 없이 살아남아 좀비로 남았다.
+    timed_out = threading.Event()
+
+    def _watchdog():
+        if not done.wait(timeout):
+            timed_out.set()
+            _kill_tree(proc)
+
+    done = threading.Event()
+    threading.Thread(target=_watchdog, daemon=True).start()
+    lines = []
     try:
         for line in proc.stdout:
             lines.append(line)
@@ -101,14 +138,18 @@ def _run_cli(args: list, timeout: int, progress_cb=None) -> subprocess.Completed
                     progress_cb(int(m.group(1)))
                 except Exception:
                     pass
-            if _time.time() - t0 > timeout:
-                proc.kill()
-                raise subprocess.TimeoutExpired(cmd, timeout)
     finally:
+        done.set()                      # 감시 스레드 해제
+        try:
+            proc.stdout.close()
+        except Exception:
+            pass
         try:
             proc.wait(timeout=10)
         except Exception:
-            proc.kill()
+            _kill_tree(proc)            # 어떤 경로로 빠져나가도 자식은 반드시 정리
+    if timed_out.is_set():
+        raise subprocess.TimeoutExpired(cmd, timeout)
     r = subprocess.CompletedProcess(cmd, proc.returncode or 0,
                                     stdout="".join(lines), stderr="")
     return r

@@ -1,6 +1,6 @@
 [project]
 name = "image-gen-mcp"
-version = "0.1.0"
+version = "0.1.2"
 description = "Claude Code MCP — 로컬 GPU(Stable Diffusion)가 있으면 로컬로, 없으면 무료 클라우드로 이미지를 생성하는 오퍼레이터"
 readme = "README.md"
 requires-python = ">=3.10"

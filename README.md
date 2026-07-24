@@ -101,3 +101,25 @@ imagegen_mcp/
   seeds/           기본 lessons.jsonl·assets.json
 pyproject.toml     uvx/pip 배포(entry: image-gen-mcp)
 ```
+
+### ★ 서브프로세스 취급 시 주의 (실제로 두 번 데인 곳)
+`local.py` 는 createImg `cli.py` 를 자식 프로세스로 띄운다. 여기서 겪은 함정 두 가지:
+
+1. **`stdin=subprocess.DEVNULL` 필수** (v0.1.1)
+   지정하지 않으면 stdio transport MCP 서버의 stdin(JSON-RPC 파이프)을 자식이 상속해,
+   자식이 시작 중 stdin 을 읽는 순간 블록된다 → CPU 0% 로 영구 hang.
+
+2. **타임아웃은 블로킹 read 와 다른 곳에서 재라** (v0.1.2)
+   ```python
+   for line in proc.stdout:        # 자식이 굳으면 여기서 영원히 블록
+       if elapsed > timeout: ...   # ← 다음 줄이 와야 도달. 영원히 안 옴
+   ```
+   출력이 잘 나오는 정상 케이스에서만 도는 무의미한 방어였다. **감시는 별도 스레드**로 분리하고,
+   `_kill_tree()` 를 **모든 종료 경로**에서 호출할 것. 자식은 수 GB 를 점유하므로 살아남으면
+   그대로 메모리 누수다(실측 14GB 좀비).
+
+> 공통 원칙: **부모가 "실패"로 처리하는 것과 자식이 실제로 죽는 것은 별개다.**
+
+### ⚠️ 벤더링 사본 동기화
+이 코드는 **DomPilot 에 벤더링**되어 있다(`E:\remote\dompilot\imagegen_mcp\`).
+`imagegen_mcp/` 를 고치면 **양쪽 두 벌을 반드시 동기화**할 것 — 한쪽만 고치면 배포판에서 재발한다.
